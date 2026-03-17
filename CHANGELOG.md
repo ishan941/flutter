@@ -30,6 +30,7 @@ More information and tips:
 docs/releases/Hotfix-Documentation-Best-Practices.md
 -->
 
+<<<<<<< HEAD
 ## Flutter 3.38 Changes
 
 ### [3.38.7](https://github.com/flutter/flutter/releases/tag/3.38.7)
@@ -49,6 +50,42 @@ docs/releases/Hotfix-Documentation-Best-Practices.md
 ### [3.38.5](https://github.com/flutter/flutter/releases/tag/3.38.5)
 
 - [flutter/179700](https://github.com/flutter/flutter/issues/179700) Update Dart to 3.10.4.
+=======
+## Flutter 3.41 Changes
+
+### [3.41.4](https://github.com/flutter/flutter/releases/tag/3.41.4)
+- [flutter/182748](https://github.com/flutter/flutter/issues/182748) When building for an iOS simulator with Xcode 26, the build will fail when there is a CocoaPod dependency that does not support arm.
+- [flutter/182361](https://github.com/flutter/flutter/issues/182361) When iOS plugins register to receive lifecycle events during an event, a crash may occur.
+- [flutter/182367](https://github.com/flutter/flutter/issues/182367) Crash on Flutter Web Skwasm apps.
+- [flutter/183071](https://github.com/flutter/flutter/issues/183071) Updated test package and related dependencies.
+
+### [3.41.3](https://github.com/flutter/flutter/releases/tag/3.41.3)
+
+- [flutter/182501](https://github.com/flutter/flutter/issues/182501) Reduce CPU utilization of idle Flutter Windows apps.
+- [flutter/182233](https://github.com/flutter/flutter/issues/182233) Tapping on the status bar may crash the app on iOS when there's a primary scroll view that has never been laid out.
+
+### [3.41.2](https://github.com/flutter/flutter/releases/tag/3.41.2)
+
+- [flutter/179673](https://github.com/flutter/flutter/issues/179673) When content sizing is not enabled on Android, a race condition can sometimes make platform views not render correctly.
+- [flutter/182076](https://github.com/flutter/flutter/issues/182076) Fix flutter build web ignoring --web-define flag
+- [flutter/182243](https://github.com/flutter/flutter/issues/182243) Don't throw an exception if no web define variable is set.
+- [flutter/182292](https://github.com/flutter/flutter/issues/182292) Fix bug in multisurfacerenderer where canvases do not have "position: absolute"
+
+### [3.41.1](https://github.com/flutter/flutter/releases/tag/3.41.1)
+
+- [flutter/182314](https://github.com/flutter/flutter/issues/182314) Test coverage is broken due to pinned `test_api` version in `flutter_test`.
+- [flutter/182335](https://github.com/flutter/flutter/issues/182335) Version 1.29 of the Dart test package adds a blank line to test output causing unexpected test failures.
+
+### [3.41.0](https://github.com/flutter/flutter/releases/tag/3.41.0)
+
+Learn about what's new in this release in [the blog post](https://blog.flutter.dev/whats-new-in-flutter-3-41-302ec140e632), and check out the [CHANGELOG](https://docs.flutter.dev/release/release-notes/release-notes-3.41.0) for a detailed list of all the new changes.
+
+## Flutter 3.38 Changes
+
+### [3.38.5](https://github.com/flutter/flutter/releases/tag/3.38.5)
+
+- [flutter/179700](https://github.com/flutter/flutter/issues/179700) Update dart to 3.10.4.
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
 
 ### [3.38.4](https://github.com/flutter/flutter/releases/tag/3.38.4)
 
@@ -86,6 +123,16 @@ docs/releases/Hotfix-Documentation-Best-Practices.md
 Learn about what's new in this release in [the blog post](https://blog.flutter.dev/whats-new-in-flutter-3-38-3f7b258f7228), and check out the [CHANGELOG](https://docs.flutter.dev/release/release-notes/release-notes-3.38.0) for a detailed list of all the new changes.
 
 ## Flutter 3.35 Changes
+
+### [3.35.7](https://github.com/flutter/flutter/releases/tag/3.35.7)
+
+- [flutter/174082](https://github.com/flutter/flutter/issues/174082) Apps, on all platforms, that extend MenuController class see a compile time failure when building.
+- [flutter/173770](https://github.com/flutter/flutter/issues/173770) Mitigates a memory leak that occurs on Android, when `Activities` are not kept upon exit and an Activity is exited and re-entered.
+
+### [3.35.6](https://github.com/flutter/flutter/releases/tag/3.35.6)
+
+- [flutter/175669](https://github.com/flutter/flutter/issues/175669) `flutter analyze --suggestions` supports versions up to Java 25, Gradle 9 and AGP 9, Kotlin 2.2.20.
+- [flutter/172624](https://github.com/flutter/flutter/issues/172624) Fixes an issue that could result in a corrupt pipeline cache when using the Impeller Vulkan back end.
 
 ### [3.35.5](https://github.com/flutter/flutter/releases/tag/3.35.5)
 

@@ -10,11 +10,13 @@ import 'package:unified_analytics/unified_analytics.dart';
 
 import '../artifacts.dart';
 import '../base/file_system.dart';
+import '../base/fingerprint.dart';
 import '../base/io.dart';
 import '../base/logger.dart';
 import '../base/process.dart';
 import '../base/project_migrator.dart';
 import '../base/utils.dart';
+import '../base/version.dart';
 import '../build_info.dart';
 import '../cache.dart';
 import '../darwin/darwin.dart';
@@ -271,7 +273,7 @@ Future<XcodeBuildResult> buildXcodeProject({
     );
   }
 
-  Map<String, String>? autoSigningConfigs;
+  final String buildDirectoryPath = getIosBuildDirectory();
 
   final Map<String, String> buildSettings =
       await app.project.buildSettingsForBuildInfo(
@@ -281,6 +283,41 @@ Future<XcodeBuildResult> buildXcodeProject({
       ) ??
       <String, String>{};
 
+  final String? targetBuildDirPath = buildSettings['TARGET_BUILD_DIR'];
+  final Directory? targetBuildDir = targetBuildDirPath != null
+      ? globals.fs.directory(targetBuildDirPath)
+      : null;
+  final bool incrementalBuild = targetBuildDir != null && targetBuildDir.existsSync();
+
+  final buildCommands = <String>[
+    ...globals.xcode!.xcrunCommand(),
+    'xcodebuild',
+    '-configuration',
+    configuration,
+  ];
+
+  // Check the public headers before checking Xcode version so headers fingerprinter is created
+  // regardless of Xcode version.
+  final bool headersChanged = publicHeadersChanged(
+    environmentType: environmentType,
+    mode: buildInfo.mode,
+    buildDirectory: buildDirectoryPath,
+    artifacts: globals.artifacts,
+    fileSystem: globals.fs,
+    logger: globals.logger,
+  );
+  final Version? xcodeVersion = globals.xcode?.currentVersion;
+  if (headersChanged &&
+      incrementalBuild &&
+      (xcodeVersion != null && xcodeVersion >= Version(26, 0, 0))) {
+    // Xcode 26 changed the way headers are pre-compiled and will throw an error if the headers
+    // have changed since the last time they were compiled. To avoid this error, clean before
+    // building if headers have changed.
+    targetBuildDir.deleteSync(recursive: true);
+    buildCommands.addAll(<String>['clean', 'build']);
+  }
+
+  Map<String, String>? autoSigningConfigs;
   if (codesign && environmentType == EnvironmentType.physical) {
     autoSigningConfigs = await getCodeSigningIdentityDevelopmentTeamBuildSetting(
       buildSettings: buildSettings,
@@ -299,6 +336,7 @@ Future<XcodeBuildResult> buildXcodeProject({
     project: project,
     targetOverride: targetOverride,
     buildInfo: buildInfo,
+    printWarnings: true,
   );
   if (app.project.usesSwiftPackageManager) {
     final String? iosDeploymentTarget = buildSettings['IPHONEOS_DEPLOYMENT_TARGET'];
@@ -310,17 +348,10 @@ Future<XcodeBuildResult> buildXcodeProject({
       );
     }
   }
-  await processPodsIfNeeded(project.ios, getIosBuildDirectory(), buildInfo.mode);
+  await processPodsIfNeeded(project.ios, buildDirectoryPath, buildInfo.mode);
   if (configOnly) {
     return XcodeBuildResult(success: true);
   }
-
-  final buildCommands = <String>[
-    ...globals.xcode!.xcrunCommand(),
-    'xcodebuild',
-    '-configuration',
-    configuration,
-  ];
 
   if (globals.logger.isVerbose) {
     // An environment variable to be passed to xcode_backend.sh determining
@@ -351,7 +382,7 @@ Future<XcodeBuildResult> buildXcodeProject({
       scheme,
       if (buildAction !=
           XcodeBuildAction.archive) // dSYM files aren't copied to the archive if BUILD_DIR is set.
-        'BUILD_DIR=${globals.fs.path.absolute(getIosBuildDirectory())}',
+        'BUILD_DIR=${globals.fs.path.absolute(buildDirectoryPath)}',
     ]);
   }
 
@@ -628,6 +659,52 @@ Future<XcodeBuildResult> buildXcodeProject({
   }
 }
 
+/// Check if the Flutter framework's public headers have changed since last built.
+bool publicHeadersChanged({
+  required BuildMode mode,
+  required EnvironmentType environmentType,
+  required String buildDirectory,
+  required Artifacts? artifacts,
+  required FileSystem fileSystem,
+  required Logger logger,
+}) {
+  final String? basePath = artifacts?.getArtifactPath(
+    Artifact.flutterFramework,
+    platform: TargetPlatform.ios,
+    mode: mode,
+    environmentType: environmentType,
+  );
+  if (basePath == null) {
+    return false;
+  }
+  final Directory headersDirectory = fileSystem.directory(
+    fileSystem.path.join(basePath, 'Headers'),
+  );
+  if (!headersDirectory.existsSync()) {
+    return false;
+  }
+  final List<String> files = headersDirectory
+      .listSync()
+      .map<String>((FileSystemEntity header) => header.path)
+      .toList();
+
+  final String fingerprintPath = fileSystem.path.join(
+    buildDirectory,
+    'framework_public_headers.fingerprint',
+  );
+  final fingerprinter = Fingerprinter(
+    fingerprintPath: fingerprintPath,
+    paths: files,
+    fileSystem: fileSystem,
+    logger: logger,
+  );
+  final bool headersChanged = !fingerprinter.doesFingerprintMatch();
+  if (headersChanged) {
+    fingerprinter.writeFingerprint();
+  }
+  return headersChanged;
+}
+
 /// Extended attributes applied by Finder can cause code signing errors. Remove them.
 /// https://developer.apple.com/library/archive/qa/qa1940/_index.html
 Future<void> removeFinderExtendedAttributes(
@@ -707,6 +784,7 @@ Future<void> diagnoseXcodeBuildFailure(
   required FileSystem fileSystem,
   required FlutterDarwinPlatform platform,
   required FlutterProject project,
+  Device? device,
 }) async {
   final XcodeBuildExecution? xcodeBuildExecution = result.xcodeBuildExecution;
   if (xcodeBuildExecution != null &&
@@ -735,6 +813,7 @@ Future<void> diagnoseXcodeBuildFailure(
     platform: platform,
     logger: logger,
     fileSystem: fileSystem,
+    device: device,
   );
 
   if (!issueDetected && xcodeBuildExecution != null) {
@@ -924,6 +1003,22 @@ _XCResultIssueHandlingResult _handleXCResultIssue({
       hasProvisioningProfileIssue: false,
       modifiedPrecompiledSource: true,
     );
+<<<<<<< HEAD
+=======
+  } else if (message.contains(
+        'Unable to find a destination matching the provided destination specifier',
+      ) &&
+      message.contains('platform:iOS Simulator, arch:x86_64,') &&
+      !message.contains('platform:iOS Simulator, arch:arm64,') &&
+      !message.contains(
+        'The requested device could not be found because no available devices matched the request.',
+      )) {
+    return _XCResultIssueHandlingResult(
+      requiresProvisioningProfile: false,
+      hasProvisioningProfileIssue: false,
+      unableToFindArmDestination: true,
+    );
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
   }
   return _XCResultIssueHandlingResult(
     requiresProvisioningProfile: false,
@@ -939,11 +1034,16 @@ Future<bool> _handleIssues(
   required FlutterDarwinPlatform platform,
   required Logger logger,
   required FileSystem fileSystem,
+  Device? device,
 }) async {
   var requiresProvisioningProfile = false;
   var hasProvisioningProfileIssue = false;
   var issueDetected = false;
   var modifiedPrecompiledSource = false;
+<<<<<<< HEAD
+=======
+  var unableToFindArmDestination = false;
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
   String? missingPlatform;
   final duplicateModules = <String>[];
   final missingModules = <String>[];
@@ -970,6 +1070,10 @@ Future<bool> _handleIssues(
         missingModules.add(handlingResult.missingModule!);
       }
       modifiedPrecompiledSource = handlingResult.modifiedPrecompiledSource;
+<<<<<<< HEAD
+=======
+      unableToFindArmDestination = handlingResult.unableToFindArmDestination;
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
       issueDetected = true;
     }
   } else if (xcResult != null) {
@@ -1047,8 +1151,43 @@ Future<bool> _handleIssues(
       'the cache.\n'
       '════════════════════════════════════════════════════════════════════════════════',
     );
+<<<<<<< HEAD
+=======
+  } else if (unableToFindArmDestination &&
+      xcodeBuildExecution != null &&
+      xcodeBuildExecution.environmentType == EnvironmentType.simulator &&
+      device != null) {
+    final bool simulatorSupportsIntel = await _simulatorSupportsIntel(device);
+    if (!simulatorSupportsIntel) {
+      logger.printError(
+        '════════════════════════════════════════════════════════════════════════════════\n'
+        'The selected simulator is incompatible with the current build settings.\n'
+        'Please use a simulator that supports x86_64, such as a simulator prior to iOS 26 or '
+        'download the universal variant of the iOS 26 simulator using '
+        '"xcodebuild -downloadPlatform iOS -architectureVariant universal".\n'
+        '════════════════════════════════════════════════════════════════════════════════',
+      );
+    }
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
   }
   return issueDetected;
+}
+
+Future<bool> _simulatorSupportsIntel(Device device) async {
+  final Version? xcodeVersion = globals.xcode?.currentVersion;
+  if (xcodeVersion != null && xcodeVersion.major < 26) {
+    return true;
+  }
+  final String runtime = await device.sdkNameAndVersion;
+  final RunResult result = await globals.processUtils.run([
+    ...globals.xcode!.xcrunCommand(),
+    'simctl',
+    'list',
+    'runtimes',
+    runtime,
+    '--json',
+  ]);
+  return result.stdout.contains('x86_64');
 }
 
 /// Returns true if a Package.swift is found for the plugin and a podspec is not.
@@ -1185,6 +1324,10 @@ class _XCResultIssueHandlingResult {
     this.duplicateModule,
     this.missingModule,
     this.modifiedPrecompiledSource = false,
+<<<<<<< HEAD
+=======
+    this.unableToFindArmDestination = false,
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
   });
 
   /// An issue indicates that user didn't provide the provisioning profile.
@@ -1206,6 +1349,11 @@ class _XCResultIssueHandlingResult {
   /// An issue indicates that a source file, such as a header in the Flutter framework, has
   /// changed since last built. This requires "flutter clean" to resolve.
   final bool modifiedPrecompiledSource;
+<<<<<<< HEAD
+=======
+
+  final bool unableToFindArmDestination;
+>>>>>>> ff37bef603469fb030f2b72995ab929ccfc227f0
 }
 
 const _kResultBundlePath = 'temporary_xcresult_bundle';
